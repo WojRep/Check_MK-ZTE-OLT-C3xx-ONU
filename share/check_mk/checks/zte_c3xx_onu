@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+
+onuPhaseStatus = ["unknown", "logging", "los", "syncMib",
+                  "working", "dyingGasp", "authFailed", "offline"]
+
+onuAuthMode = ["unknow", "SN", "PWD", "SN+PWD", "RegID", "RedID+802.1x",
+               "RedID+Mutual", "HexPWD", "SN+HexPWD", "Loid", "Loid+PWD"]
+
+factory_settings["zte_c3xx_onu_default_levels"] = {
+    'olt_rx': (-25.0, -27.0),
+    'onu_tx': (6.0, 7.0),
+    'onu_rx': (-25.0, -27.0),
+}
+
+
+def parse_zte_c3xx_onu(info):
+    parsed = []
+    a = 0
+    for x in info:
+        a = a+1
+    a = int(a/2)
+    b = 0
+    for i in range(a):
+        x = b
+        y = b+1
+        onuRx = 0
+        onuTx = 0
+        onuName = info[x][0]
+        onuName = onuName.split('.')
+        onuID = saveint(onuName[1])
+        onuifIndex = saveint(onuName[0])
+        onuifIndex = bin(onuifIndex)[2:].zfill(32)
+        onuType = onuifIndex[:4]
+        onuType = int(onuType, 2)
+        onuShelf = onuifIndex[4:8]
+        onuShelf = int(onuShelf)
+        onuRack = onuifIndex[8:16]
+        onuRack = int(onuRack, 2)
+        onuSlot = onuifIndex[16:24]
+        onuSlot = int(onuSlot, 2)
+        onuPort = onuifIndex[24:32]
+        onuPort = int(onuPort, 2)
+        onuPort = "gpon_" + str(onuRack) + "/" + \
+            str(onuSlot) + "/" + str(onuPort)
+        onuName = str(onuPort) + "_" + str(onuID)
+        if not info[y][4]:
+            onuRx = -40
+        if not info[y][5]:
+            onuTx = -40
+        onuRx = saveint(info[y][4])
+        onuTx = saveint(info[y][5])
+        if (onuRx < 32768):
+            onuRx = float(onuRx * 0.002) - 30.0
+        elif ((onuRx < 65535) and (onuRx > 32767)):
+            onuRx = (-30 - ((65535 - onuRx) * 0.002))
+        else:
+            onuRx = -40.0
+        if (onuTx < 65535):
+            onuTx = float(onuTx * 0.002) - 30.0
+        else:
+            onuTx = -40.0
+        parsed.append([str(onuName)] + info[x][1:4] +
+                      [str(onuRx)] + [str(onuTx)] + info[x][6:])
+        b = b+2
+    return parsed
+
+
+def inventory_zte_c3xx_onu(info):
+    for line in info:
+        onuid = line[0]
+        onuname = "%s" % (onuid)
+        yield (onuname, "zte_c3xx_onu_default_levels")
+
+
+def check_zte_c3xx_onu(item, params, parsed):
+    for line in parsed:
+        perfdata = []
+        infotext = []
+        onuid = line[0]
+        if (item == onuid):
+            onuName = line[1]
+            onuType = line[2]
+            onuDesc = line[3]
+            onuRx = savefloat(line[4])
+            onuTx = savefloat(line[5])
+            oltRx = savefloat(line[6])/1000.0
+            onuStatusID = saveint(line[7])
+            onuStatus = onuPhaseStatus[onuStatusID]
+            onuAuthSN = line[8]
+            onuAuthSN = onuAuthSN.split(',')
+            onuAuthType = onuAuthMode[int(onuAuthSN[0])]
+            onuAuthSN = onuAuthSN[1]
+            if "onu_rx" in params:
+                onu_rx_warn, onu_rx_crit = params["onu_rx"]
+            if "olt_rx" in params:
+                olt_rx_warn, olt_rx_crit = params["olt_rx"]
+            perfdata = [
+                ("onurx", onuRx, onu_rx_warn, onu_rx_crit, -40, 0),
+                ("onutx", onuTx),
+                ("oltrx", oltRx, olt_rx_warn, olt_rx_crit, -40, 0),
+                ("onuphasestatus", onuStatusID),
+            ]
+            infotext = " - %s , %s, AuthMode: %s: %s, Status: %s ,  ONU (Rx/Tx): %.1fdBm/%.1fdBm , OLT Rx: %.1fdBm" % \
+                (onuType, onuDesc, onuAuthType, onuAuthSN,
+                 onuStatus, onuRx, onuTx, oltRx)
+            if (onuRx == -40.0) and (onuStatus == "dyingGasp"):
+                return (0, "OFFLINE" + infotext, perfdata)
+            elif (onuRx == -40.0) and (onuStatus == "authFailed"):
+                return (2, "OFFLINE" + infotext, perfdata)
+            elif (onuRx == -40.0) and (onuStatus == "los"):
+                return (2, "OFFLINE" + infotext, perfdata)
+            elif (onuRx == -40.0):
+                return (3, "OFFLINE" + infotext, perfdata)
+            elif (onuRx <= onu_rx_crit) or (oltRx <= olt_rx_crit):
+                return (2, "CRIT" + infotext, perfdata)
+            elif (onuRx <= onu_rx_warn) or (oltRx <= olt_rx_warn):
+                return (1, "WARN" + infotext, perfdata)
+            else:
+                return (0, "OK" + infotext, perfdata)
+    return (3, "UNKNOWN - ONU %s not found" % item)
+
+
+check_info["zte_c3xx_onu"] = {
+    'parse_function': parse_zte_c3xx_onu,
+    'check_function': check_zte_c3xx_onu,
+    'inventory_function': inventory_zte_c3xx_onu,
+    'service_description': 'Interface %s',
+    'has_perfdata': True,
+    'snmp_info':
+        (".1.3.6.1.4.1.3902.1082", [
+            OID_END,                    # 0 - Onu ID
+            "500.10.2.3.3.1.2",         # 1 - ONU Name
+            "500.10.2.3.3.1.1",         # 2 - Onu type Name
+            "500.10.2.3.3.1.3",         # 3 - Onu Description
+            "500.20.2.2.2.1.10",                # 4 - ONU Optical Rx
+            "500.20.2.2.2.1.14",                # 5 - ONU Optical Tx
+            "500.1.2.4.2.1.2",          # 6 - OLT Optical Rx from ONU
+            "500.10.2.3.8.1.4",         # 7 - ONU Status
+            "500.10.2.3.3.1.18",                # 8 - ONU auth
+        ]),
+
+    'snmp_scan_function': lambda oid: oid(".1.3.6.1.2.1.1.2.0").startswith('.1.3.6.1.4.1.3902.1082.1001'),
+    'group': 'zte_c3xx_onu',
+    'default_levels_variable': 'zte_c3xx_onu_default_levels',
+}
