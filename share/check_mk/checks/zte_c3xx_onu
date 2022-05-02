@@ -140,7 +140,6 @@ check_info["zte_c3xx_onu"] = {
             "500.10.2.3.8.1.4",         # 7 - ONU Status
             "500.10.2.3.3.1.18",                # 8 - ONU auth
         ]),
-
     'snmp_scan_function': lambda oid: oid(".1.3.6.1.2.1.1.2.0").startswith('.1.3.6.1.4.1.3902.1082.1001'),
     'group': 'zte_c3xx_onu',
     'default_levels_variable': 'zte_c3xx_onu_default_levels',
