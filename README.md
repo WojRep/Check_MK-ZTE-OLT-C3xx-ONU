@@ -1,6 +1,5 @@
 # Check_MK-ZTE-OLT-C3xx-ONU
 
-<<<<<<< HEAD
 
 Check_MK plugin that monitors parameters of GPON ONU interfaces.
 
@@ -12,4 +11,4 @@ Check_MK plugin that monitors parameters of GPON ONU interfaces.
 
 ![Screenshot 3](https://github.com/WojRep/Check_MK-ZTE-OLT-C3xx-ONU/blob/master/.html/zte_c3xx_onu-3.png?raw=true)
 
-![Screenshot 41](https://github.com/WojRep/Check_MK-ZTE-OLT-C3xx-ONU/blob/master/.html/zte_c3xx_onu-4.png?raw=true)
+![Screenshot 4](https://github.com/WojRep/Check_MK-ZTE-OLT-C3xx-ONU/blob/master/.html/zte_c3xx_onu-4.png?raw=true)
